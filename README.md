@@ -95,10 +95,10 @@ LLM / Agent Response
 - pgvector
 
 ### API
-- Fastify
+- FastAPI
 
 ### Embeddings
-- OpenAI Embeddings
+- OpenAI Embeddings (planned)
 - sentence-transformers (planned)
 
 ---
