@@ -1,5 +1,9 @@
 CREATE TABLE memories_v2 (
-    id SERIAL PRIMARY KEY,
+    ref_id BIGSERIAL UNIQUE,
+
+    user_id INTEGER PRIMARY KEY
+        REFERENCES users(id)
+        ON DELETE CASCADE,
 
     content TEXT NOT NULL,
 
@@ -27,7 +31,7 @@ CREATE TABLE memories_v2 (
         importance_score >= 0 AND importance_score <= 1
     ),
 
-    access_count INTEGER NOT NULL DEFAULT 0,
+    access_ratio NUMERIC(20,3) NOT NULL DEFAULT 0,
 
     embedding VECTOR(384) NOT NULL,
 
@@ -39,7 +43,7 @@ CREATE TABLE memories_v2 (
 
     linkable BOOLEAN NOT NULL DEFAULT FALSE,
 
-    ref_link INTEGER REFERENCES memories(id),
+    ref_link BIGINT REFERENCES memories_v2(ref_id),
 
     expires_at TIMESTAMP
 );

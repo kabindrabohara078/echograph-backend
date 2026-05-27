@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from typing import Literal
 from database import conn 
 from embedding import generate_embedding
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 
 
 # react frontend support
@@ -23,162 +23,183 @@ class searchInput(BaseModel):
     type: Literal["fact", "event", "preference", 'decision', 'task']
     importance_score: float
 
+class newUser(BaseModel):
+    fname: str
+    lname: str 
+    uname: str 
+    email: EmailStr
+    password: str
 
 
-# memmory layer incrementer function
-@app.post('/memory')
-def create_memory(memory: MemoryInput):
-    embedding = generate_embedding(memory.content)
+class login(BaseModel):
+    uname_email: str
+    
 
-    cursor = conn.cursor()
 
-    cursor.execute(
-        """
-        INSERT INTO memories (
-        content,
-        state,
-        type,
-        score,
-        embedding
-        )
-        VALUES (%s, %s, %s, %s, %s)
-        """,
-        (
-            memory.content,
-            "active",
-            memory.type,
-            memory.score,
-            embedding
+
+
+
+@app.post('/signup')
+def add_new_user(user: newUser):
+
+
+
+
+
+# # memmory layer incrementer function
+# @app.post('/memory')
+# def create_memory(memory: MemoryInput):
+#     embedding = generate_embedding(memory.content)
+
+#     cursor = conn.cursor()
+
+#     cursor.execute(
+#         """
+#         INSERT INTO memories (
+#         content,
+#         state,
+#         type,
+#         score,
+#         embedding
+#         )
+#         VALUES (%s, %s, %s, %s, %s)
+#         """,
+#         (
+#             memory.content,
+#             "active",
+#             memory.type,
+#             memory.score,
+#             embedding
         
-        )
-    )
+#         )
+#     )
 
-    conn.commit()
+#     conn.commit()
 
-    return {
-        "status": "memory stored"
-    }
-
-
-
-# memmory layer extractor function
-@app.post("/search")
-def search_memory(search: searchInput):
-
-    data = search.model_dump()
-
-    print(data)
-    print(type(data))
-
-    query_embedding = generate_embedding(search.query)
-
-    cursor = conn.cursor()
+#     return {
+#         "status": "memory stored"
+#     }
 
 
-    # extractor module
-    cursor.execute(
-        """
-        SELECT 
-            id,
-            content, 
-            type,
-            score,
-            access_count,
-            created_at,
-            embedding <-> %s::vector AS distance,
 
-            (
-                (1.0 / (1.0 + (embedding <-> %s::vector)))
+# # memmory layer extractor function
+# @app.post("/search")
+# def search_memory(search: searchInput):
 
-                + (0.25 * score)
+#     data = search.model_dump()
 
-                + (0.1 * LN(1 + access_count))
+#     print(data)
+#     print(type(data))
 
-                + (
+#     query_embedding = generate_embedding(search.query)
 
-                    0.2 * EXP(
-                        -0.000001 * 
-                        EXTRACT (
-                            EPOCH FROM (
-                                        now() - created_at
-                                        )
-                                )
-                                )
-                  )
-
-            ) AS final_rank
-
-        FROM memories
-
-        WHERE state = 'active' 
-
-        ORDER BY final_rank DESC
-
-        LIMIT 5;
-        """,
-        (query_embedding, query_embedding)
-    )
-
-    results = cursor.fetchall()
-
-    memory_ids = [[row[0], row[6]] for row in results]
-
-    print(results)
+#     cursor = conn.cursor()
 
 
-    # memory_ids = [x for x in memory_ids if x[1] >= 1]
+#     # extractor module
+#     cursor.execute(
+#         """
+#         SELECT 
+#             id,
+#             content, 
+#             type,
+#             score,
+#             access_count,
+#             created_at,
+#             embedding <-> %s::vector AS distance,
+
+#             (
+#                 (1.0 / (1.0 + (embedding <-> %s::vector)))
+
+#                 + (0.25 * score)
+
+#                 + (0.1 * LN(1 + access_count))
+
+#                 + (
+
+#                     0.2 * EXP(
+#                         -0.000001 * 
+#                         EXTRACT (
+#                             EPOCH FROM (
+#                                         now() - created_at
+#                                         )
+#                                 )
+#                                 )
+#                   )
+
+#             ) AS final_rank
+
+#         FROM memories
+
+#         WHERE state = 'active' 
+
+#         ORDER BY final_rank DESC
+
+#         LIMIT 5;
+#         """,
+#         (query_embedding, query_embedding)
+#     )
+
+#     results = cursor.fetchall()
+
+#     memory_ids = [[row[0], row[6]] for row in results]
+
+#     print(results)
 
 
-    # testing module
-    print('#############################################################')
-    print(memory_ids)
-    print('#############################################################')
-    print('#############################################################')
+#     # memory_ids = [x for x in memory_ids if x[1] >= 1]
 
 
-    memory_ids = [x for x in memory_ids if x[1] <= 1]
-
-    print(memory_ids)
-    print('#############################################################')
-
-
-    memory_ids = [row[0] for row in memory_ids]
+#     # testing module
+#     print('#############################################################')
+#     print(memory_ids)
+#     print('#############################################################')
+#     print('#############################################################')
 
 
-    if memory_ids:
-        cursor.execute(
-            """
-            UPDATE memories
-            SET 
-                access_count = access_count + 1,
-                last_accessed = NOW()
-            WHERE id = ANY(%s)
-            """,
-            (memory_ids, )
-        )
-    conn.commit()
+#     memory_ids = [x for x in memory_ids if x[1] <= 1]
 
-    memories = []
-
-    for row in results:
-        if row[0] in memory_ids:
-            memories.append({
-                "id": row[0],
-                "content": row[1],
-                "type": row[2],
-                "score": row[3],
-                "access_count": row[4],
-                "created_at": row[5],
-                "distance": row[6],
-                "final_rank": row[7]
-            })
-
-    if len(memories) == 0:
-        return {
-            "results": "No memory available with high confidence!"
-        }
+#     print(memory_ids)
+#     print('#############################################################')
 
 
-    return {
-            "results": data
-        }
+#     memory_ids = [row[0] for row in memory_ids]
+
+
+#     if memory_ids:
+#         cursor.execute(
+#             """
+#             UPDATE memories
+#             SET 
+#                 access_count = access_count + 1,
+#                 last_accessed = NOW()
+#             WHERE id = ANY(%s)
+#             """,
+#             (memory_ids, )
+#         )
+#     conn.commit()
+
+#     memories = []
+
+#     for row in results:
+#         if row[0] in memory_ids:
+#             memories.append({
+#                 "id": row[0],
+#                 "content": row[1],
+#                 "type": row[2],
+#                 "score": row[3],
+#                 "access_count": row[4],
+#                 "created_at": row[5],
+#                 "distance": row[6],
+#                 "final_rank": row[7]
+#             })
+
+#     if len(memories) == 0:
+#         return {
+#             "results": "No memory available with high confidence!"
+#         }
+
+
+#     return {
+#             "results": data
+#         }
