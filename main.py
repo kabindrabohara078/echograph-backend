@@ -8,6 +8,11 @@ app = FastAPI()
 class MemoryInput(BaseModel):
     content: str
 
+class searchInput(BaseModel):
+    query: str
+
+
+
 @app.get('/')
 def root():
     return ({'message':'EchoGraph API running'})
@@ -31,3 +36,31 @@ def create_memory(memory: MemoryInput):
     return {
         "status": "memory stored"
     }
+
+@app.post('/search')
+def search_memory(search: searchInput):
+    query_embedding = generate_embedding(search.query)
+
+    cursor = conn.cursor()
+
+    cursor.execute(
+        """
+        SELECT id, content, embedding <-> %s::vector AS distance FROM memories ORDER BY distance LIMIT 5;
+        """,
+        (query_embedding, )
+    )
+
+    results = cursor.fetchall()
+
+    memories = []
+
+    for row in results:
+        memories.append({
+            "id": row[0],
+            "content": row[1],
+            "distance": row[2]
+        })
+
+        return {
+            "results": memories
+        }
