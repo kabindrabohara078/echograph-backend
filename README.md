@@ -1,140 +1,167 @@
-# EchoGraph
+# 🧠 EchoGraph Backend
 
-Hybrid memory architecture for AI systems.
+EchoGraph is an AI memory system built using FastAPI, PostgreSQL, and pgvector. It stores, retrieves, and ranks memories using semantic embeddings combined with structured metadata and adaptive scoring.
 
-EchoGraph combines structured event storage with semantic retrieval to build scalable long-term memory for LLMs, AI agents, and context-aware applications.
-
----
-
-## Overview
-
-Modern AI systems struggle with persistent memory, contextual continuity, and efficient retrieval of past interactions.
-
-EchoGraph is designed to solve this by combining:
-
-- Structured memory storage
-- Semantic vector retrieval
-- Context-aware memory linking
-- Hybrid search pipelines
-- Long-term conversational memory
-
-The system stores precise factual events while using embeddings to retrieve semantically related context.
+It acts as a long-term memory layer for AI systems.
 
 ---
 
-## Core Idea
+# 🚀 Overview
 
-EchoGraph separates memory into two layers:
+EchoGraph enables:
 
-### Structured Memory
-Stores exact information and metadata.
-
-Examples:
-- Events
-- Decisions
-- User actions
-- Timestamps
-- Relationships
-- Tags
-
-### Semantic Memory
-Uses embeddings to retrieve related memories based on meaning rather than exact wording.
-
-This hybrid architecture enables:
-- Accurate retrieval
-- Context continuity
-- Related memory expansion
-- Better reasoning for AI systems
+- Storing structured memories
+- Semantic search using embeddings
+- Hybrid ranking (similarity + metadata signals)
+- Memory lifecycle management
+- Multi-user support via user_id
 
 ---
 
-## Features
+# 🧱 Tech Stack
 
-- Hybrid structured + semantic memory
-- Vector similarity search
-- Metadata filtering
-- Long-term context retrieval
-- Memory relationship graphs
-- Scalable retrieval pipeline
-- AI-agent compatible architecture
-- PostgreSQL + pgvector support
-- Modular backend design
+- FastAPI
+- PostgreSQL
+- pgvector
+- sentence-transformers
+- Python
 
 ---
 
-## Planned Architecture
+# 🗄️ Memory Schema (Core Table)
 
-```text
-User Input
-    ↓
-Event Extraction
-    ↓
-Structured Storage (PostgreSQL)
-    ↓
-Embedding Generation
-    ↓
-Vector Storage (pgvector)
-    ↓
-Hybrid Retrieval Engine
-    ↓
-Context Builder
-    ↓
-LLM / Agent Response
+Each memory contains:
+
+- id → unique identifier
+- user_id → owner of memory
+- content → memory text
+- type → fact | event | preference | decision | task
+- state → active | archived | deleted
+- score → importance (0–1)
+- access_count → usage frequency
+- embedding → vector representation
+- created_at → creation time
+- updated_at → last update
+- last_accessed → last retrieval
+- expires_at → optional expiry
+
+---
+
+# 🔌 API Endpoints
+
+## POST /memory
+
+Stores a new memory.
+
+### Request
+
+```json
+{
+  "content": "User switched from MongoDB to PostgreSQL",
+  "type": "decision",
+  "score": 0.9
+}
+```
+
+### Response
+
+```json
+{
+  "message": "Memory stored successfully"
+}
 ```
 
 ---
 
-## Tech Stack
+## POST /search
 
-### Backend
-- Node.js
-- TypeScript
+Search memories using semantic + ranking system.
 
-### Database
-- PostgreSQL
-- pgvector
+### Request
 
-### API
-- FastAPI
+```json
+{
+  "query": "What database does the user prefer?"
+}
+```
 
-### Embeddings
-- OpenAI Embeddings (planned)
-- sentence-transformers (planned)
+### Response
 
----
-
-## Use Cases
-
-- AI assistants
-- Long-term conversational agents
-- Memory systems for LLMs
-- Semantic search systems
-- Context-aware applications
-- Agent orchestration platforms
+```json
+[
+  {
+    "content": "User switched from MongoDB to PostgreSQL",
+    "score": 0.92
+  }
+]
+```
 
 ---
 
-## Project Goals
+# 🧠 Ranking System
 
-- Build scalable AI memory infrastructure
-- Improve contextual retrieval quality
-- Combine exact factual storage with semantic understanding
-- Create reusable memory tooling for AI systems
-
----
-
-## Status
-
-Currently in active development.
+```text
+final_score =
+(1 / (1 + vector_distance))
++ (0.25 × score)
++ (0.1 × log(1 + access_count))
++ (0.2 × exp(-λ × age))
+```
 
 ---
 
-## Vision
+# ⚙️ Setup Instructions
 
-EchoGraph aims to become a flexible memory layer for intelligent systems by combining structured knowledge with semantic understanding.
+Install dependencies:
+
+```bash
+pip install -r requirements.txt
+```
+
+Enable pgvector:
+
+```sql
+CREATE EXTENSION IF NOT EXISTS vector;
+```
+
+Run server:
+
+```bash
+uvicorn main:app --reload
+```
+
+Default local backend:
+
+```text
+http://localhost:8000
+```
+
+Swagger docs:
+
+```text
+http://localhost:8000/docs
+```
 
 ---
 
-## License
+# 🌍 Environment Variables
 
-MIT License
+```env
+DATABASE_URL=postgresql://user:password@localhost:5432/echograph
+```
+
+---
+
+# 📈 Project Status
+
+MVP completed.
+
+Current capabilities:
+
+- semantic memory storage
+- vector similarity retrieval
+- adaptive ranking system
+- memory lifecycle management
+- FastAPI + PostgreSQL + pgvector architecture
+
+EchoGraph is currently evolving into a full AI memory platform.
