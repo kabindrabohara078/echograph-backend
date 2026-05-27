@@ -1,22 +1,33 @@
 from fastapi import FastAPI
-# from database import conn 
+from database import conn 
 from embedding import generate_embedding
+from pydantic import BaseModel
 
 app = FastAPI()
+
+class MemoryInput(BaseModel):
+    content: str
 
 @app.get('/')
 def root():
     return ({'message':'EchoGraph API running'})
 
-# @app.get('/test-db')
-# def test_db():
-#     return {'status':'Database connected'}
+@app.post('/memory')
+def create_memory(memory: MemoryInput):
+    embedding = generate_embedding(memory.content)
 
-@app.get('/embed')
-def embed():
-    vector = generate_embedding("I like doing maths")
+    cursor = conn.cursor()
+
+    cursor.execute(
+        """
+        INSERT INTO memories (content, embedding)
+        VALUES (%s, %s)
+        """,
+        (memory.content, embedding)
+    )
+
+    conn.commit()
 
     return {
-        "dimensions": len(vector),
-        "sample": vector
+        "status": "memory stored"
     }
