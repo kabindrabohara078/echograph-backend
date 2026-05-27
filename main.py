@@ -7,6 +7,8 @@ app = FastAPI()
 
 class MemoryInput(BaseModel):
     content: str
+    type: str
+    score: float = 1
 
 class searchInput(BaseModel):
     query: str
@@ -25,10 +27,23 @@ def create_memory(memory: MemoryInput):
 
     cursor.execute(
         """
-        INSERT INTO memories (content, embedding)
-        VALUES (%s, %s)
+        INSERT INTO memories (
+        content,
+        state,
+        type,
+        score,
+        embedding
+        )
+        VALUES (%s, %s, %s, %s, %s)
         """,
-        (memory.content, embedding)
+        (
+            memory.content,
+            "active",
+            memory.type,
+            memory.score,
+            embedding
+        
+        )
     )
 
     conn.commit()
