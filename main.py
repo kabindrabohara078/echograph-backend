@@ -69,18 +69,48 @@ def search_memory(search: searchInput):
             score,
             access_count,
             created_at,
-            embedding <-> %s::vector AS distance 
+            embedding <-> %s::vector AS distance,
+
+            (
+                (1.0 / (1.0 + (embedding <-> %s::vector)))
+
+                + (0.25 * score)
+
+                + (0.01 * LN(1 + access_count))
+
+                + (
+
+                    0.2 * EXP(
+                        -0.000001 * 
+                        EXTRACT (
+                            EPOCH FROM (
+                                now() - created_at
+                        )
+                    )
+
+                  )
+                  )
+
+
+
+            ) AS final_rank
+
         FROM memories
+
         WHERE state = 'active' 
-        ORDER BY distance 
-        LIMIT 3;
+
+        ORDER BY final_rank DESC
+
+        LIMIT 5;
         """,
-        (query_embedding, )
+        (query_embedding, query_embedding)
     )
 
     results = cursor.fetchall()
 
     memory_ids = [[row[0], row[6]] for row in results]
+
+    print(results)
 
 
     
@@ -99,9 +129,6 @@ def search_memory(search: searchInput):
     print(memory_ids)
     print('#############################################################')
 
-
-
-    # memory_ids = memory_ids[-1:1:-1]
 
     memory_ids = [row[0] for row in memory_ids]
 
@@ -130,7 +157,8 @@ def search_memory(search: searchInput):
                 "score": row[3],
                 "access_count": row[4],
                 "created_at": row[5],
-                "distance": row[6]
+                "distance": row[6],
+                "final_rank": row[7]
             })
 
     if len(memories) == 0:
