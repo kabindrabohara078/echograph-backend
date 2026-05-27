@@ -8,9 +8,10 @@ load_dotenv()
 # environment: local url
 DATABASE_URL = os.getenv("DTABASE_URL")
 
+
 # connecting database
 conn = psycopg2.connect(DATABASE_URL)
-# print('Database connected...')
+print('Database connected...')
 
 
 cursor = conn.cursor()

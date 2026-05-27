@@ -1,24 +1,31 @@
 from fastapi import FastAPI
+from typing import Literal
 from database import conn 
 from embedding import generate_embedding
 from pydantic import BaseModel
+
+
+# react frontend support
+# from fastapi.middleware.cors import CORSMiddleware
+
+
 
 app = FastAPI()
 
 class MemoryInput(BaseModel):
     content: str
+
     type: str
     score: float = 1
 
 class searchInput(BaseModel):
     query: str
+    type: Literal["fact", "event", "preference", 'decision', 'task']
+    importance_score: float
 
 
 
-@app.get('/')
-def root():
-    return ({'message':'EchoGraph API running'})
-
+# memmory layer incrementer function
 @app.post('/memory')
 def create_memory(memory: MemoryInput):
     embedding = generate_embedding(memory.content)
@@ -54,12 +61,21 @@ def create_memory(memory: MemoryInput):
 
 
 
-@app.post('/search')
+# memmory layer extractor function
+@app.post("/search")
 def search_memory(search: searchInput):
+
+    data = search.model_dump()
+
+    print(data)
+    print(type(data))
+
     query_embedding = generate_embedding(search.query)
 
     cursor = conn.cursor()
 
+
+    # extractor module
     cursor.execute(
         """
         SELECT 
@@ -76,7 +92,7 @@ def search_memory(search: searchInput):
 
                 + (0.25 * score)
 
-                + (0.01 * LN(1 + access_count))
+                + (0.1 * LN(1 + access_count))
 
                 + (
 
@@ -84,14 +100,11 @@ def search_memory(search: searchInput):
                         -0.000001 * 
                         EXTRACT (
                             EPOCH FROM (
-                                now() - created_at
-                        )
-                    )
-
+                                        now() - created_at
+                                        )
+                                )
+                                )
                   )
-                  )
-
-
 
             ) AS final_rank
 
@@ -113,11 +126,10 @@ def search_memory(search: searchInput):
     print(results)
 
 
-    
-
-
     # memory_ids = [x for x in memory_ids if x[1] >= 1]
 
+
+    # testing module
     print('#############################################################')
     print(memory_ids)
     print('#############################################################')
@@ -166,6 +178,7 @@ def search_memory(search: searchInput):
             "results": "No memory available with high confidence!"
         }
 
+
     return {
-            "results": memories
+            "results": data
         }
