@@ -28,12 +28,21 @@ def login(user):
 
     row = cursor.fetchone()
 
+    print('++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++')
+    print(row)
+
     if not row:
         return -1
 
 
     hashed_password = row[0]
-    return verify_password(user.password, hashed_password)
+
+    print(hashed_password)
+
+    if verify_password(user.password, hashed_password) == False:
+        return 0
+    
+    return True
    
 
 
