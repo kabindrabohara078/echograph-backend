@@ -304,7 +304,7 @@ def create_memory(
                 AND user_id = %s
                 AND (
                     embedding <=> %s::vector
-                ) < 0.35
+                ) < 0.30
 
             ORDER BY (
                 embedding <=> %s::vector
@@ -359,13 +359,10 @@ def create_memory(
         type,
         importance_score,
         embedding,
-        created_at,
-        access_ratio
-
+        created_at
     )
 
     VALUES (
-        %s,
         %s,
         %s,
         %s,
@@ -382,8 +379,7 @@ def create_memory(
         memory.type,
         memory.score,
         embedding,
-        datetime.utcnow(),
-        0
+        datetime.utcnow()
     )
     )
 
@@ -505,7 +501,7 @@ def search_memory(
         UPDATE memories_v2
 
         SET
-            access_ratio = access_ratio + 1,
+            access_ratio = access_ratio * 1.05,
             last_accessed = NOW()
 
         WHERE ref_id = ANY(%s)
