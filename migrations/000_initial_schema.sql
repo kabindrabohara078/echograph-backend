@@ -12,8 +12,8 @@ CREATE TABLE memories_v2 (
     CHECK (
         state IN (
             'active',
-            'archived',
-            'deleted'
+            'archive',
+            'delete'
         )
     ),
 
@@ -34,7 +34,8 @@ CREATE TABLE memories_v2 (
             'plan',
             'reminder',
             'feedback',
-            'emotion'
+            'emotion',
+            'delete'
         )
     ),
 
