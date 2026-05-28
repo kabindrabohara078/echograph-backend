@@ -1,16 +1,33 @@
 from fastapi import FastAPI
 from typing import Literal
 from database import conn 
-from embedding import generate_embedding
+# from embedding import generate_embedding
 from pydantic import BaseModel, EmailStr
+from authentication import login
+from authentication import signup
 
 
 # react frontend support
-# from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.cors import CORSMiddleware
 
 
 
 app = FastAPI()
+
+
+origins = [
+    "http://localhost:5173",
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
 
 class MemoryInput(BaseModel):
     content: str
@@ -25,28 +42,54 @@ class searchInput(BaseModel):
 
 class newUser(BaseModel):
     fname: str
-    lname: str 
-    uname: str 
+    lname: str
     email: EmailStr
     password: str
 
 
-class login(BaseModel):
-    uname_email: str
-    
 
-
-
-
-
-@app.post('/signup')
+@app.post('/register')
 def add_new_user(user: newUser):
 
+    print("+++++++++++++++++++++++")
+    print("Got a signup request")
+    print("++++++++++++++++++++++++++")
+
+    signup_response = signup(user)
+
+    if signup_response:
+        return "Already exists"
+
+
+    return "Added successfully"
+
+
+
+class LoginUser(BaseModel):
+    email: EmailStr
+    password: str
+
+
+@app.post('/login')
+def login_user(user: LoginUser):
+
+    print("+++++++++++++++++++++++")
+    print("Got a login request")
+    print(user)
+    print("+++++++++++++++++++++++")
+
+
+    login_response = login(user)
+
+    if login_response == -1:
+        return "Does not exist"
+    else:
+        return "Invalid Credentials"
 
 
 
 
-# # memmory layer incrementer function
+# memmory layer incrementer function
 # @app.post('/memory')
 # def create_memory(memory: MemoryInput):
 #     embedding = generate_embedding(memory.content)

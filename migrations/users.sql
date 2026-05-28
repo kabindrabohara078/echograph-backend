@@ -5,7 +5,7 @@ CREATE TABLE users (
 
     lname TEXT,
 
-    uname TEXT UNIQUE NOT NULL,
+    uname TEXT UNIQUE,
 
     email TEXT UNIQUE NOT NULL,
 
