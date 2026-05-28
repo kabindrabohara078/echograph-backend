@@ -45,7 +45,7 @@ CREATE TABLE memories_v2 (
     ),
 
     access_ratio NUMERIC(20,3)
-    NOT NULL DEFAULT 0,
+    NOT NULL DEFAULT 0.1,
 
     embedding VECTOR(384)
     NOT NULL,

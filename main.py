@@ -32,7 +32,7 @@ app = FastAPI()
 # =========================================================
 
 origins = [
-    "http://localhost:5173",
+    "http://localhost:5174",
 ]
 
 app.add_middleware(
@@ -113,7 +113,6 @@ class SearchInput(BaseModel):
         "feedback",
         "emotion"
     ]
-    importance_score: float
 
 
 class NewUser(BaseModel):
@@ -300,11 +299,11 @@ def search_memory(
     cursor.execute(
         """
         SELECT
-            id,
+            ref_id,
             content,
             type,
             importance_score,
-            access_count,
+            access_ratio,
             created_at,
 
             embedding <-> %s::vector AS distance,
@@ -324,7 +323,7 @@ def search_memory(
 
                 + (
                     0.1 *
-                    LN(1 + access_count)
+                    LN(1 + access_ratio)
                 )
 
                 + (
@@ -367,27 +366,30 @@ def search_memory(
     memory_ids = [
         row[0]
         for row in results
-        if row[6] <= 1
+        if row[6] < 1
     ]
 
     # =====================================================
     # UPDATE ACCESS COUNT
     # =====================================================
 
-    # if memory_ids:
+    if memory_ids:
 
-    #     cursor.execute(
-    #         """
-    #         UPDATE memories_v2
-    #         SET
-    #             access_count = access_count + 1,
-    #             last_accessed = NOW()
-    #         WHERE id = ANY(%s)
-    #         """,
-    #         (memory_ids,)
-    #     )
+        cursor.execute(
+            """
+            UPDATE memories_v2
+            SET
+                access_ratio = access_ratio * 1.05,
+                last_accessed = NOW()
+            WHERE ref_id = ANY(%s)
+            """,
+            (memory_ids,)
+        )
 
-    #     conn.commit()
+        
+
+
+        conn.commit()
 
     # =====================================================
     # FORMAT RESULTS
