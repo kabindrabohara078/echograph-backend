@@ -22,32 +22,26 @@ def login(user):
 
     cursor.execute(
         """
-        SELECT * FROM users WHERE email = %s
+        SELECT password_hash FROM user_auth WHERE email= %s
         """,(user.email,)
     )
 
-    existing_user = cursor.fetchone()
+    row = cursor.fetchone()
 
-    if existing_user:
-        cursor.execute(
-            """
-            SELECT password_hash FROM user_auth WHERE email = %s
-            """, (user.email)
-        )
-
-        cursor.commit()
-
-        hashed_password = cursor.fetchone()
-        return verify_password(user.password, hashed_password)
-    else:
+    if not row:
         return -1
 
 
+    hashed_password = row[0]
+    return verify_password(user.password, hashed_password)
+   
 
 
 
-# fname
-# lname
+
+
+# firstname
+# lastname
 # email
 # password
 
@@ -65,28 +59,30 @@ def signup(user):
 
     if existing_user:
         return "User already Exists"
-
-       
     else:
         cursor.execute(
             """
-            INSERT INTO users(fname, lname, email) VALUES(%s, %s, %s)
-            """, (user.fname, user.lname, user.email)
+            INSERT INTO users(fname, lname, email)
+            VALUES(%s, %s, %s)
+            RETURNING id
+            """, (user.firstname, user.lastname, user.email)
 
         )
-        print('++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++')
-        print(user.password)
-        print('++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++')
+
+        user_id = cursor.fetchone()[0]
 
         hash_pwd = hash_password(user.password)
-        
+        print('++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++') #password hash test
+        print(hash_pwd)
+        print('++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++')
+
         cursor.execute(
             """
-            INSERT INTO user_auth(email, password_hash) VALUES(%s, %s)
-            """, (user.email, hash_pwd)
+            INSERT INTO user_auth(user_id, email, password_hash) VALUES(%s,%s, %s)
+            """, (user_id, user.email, hash_pwd)
         )
 
-        cursor.commit()
+        conn.commit()
 
     return 0
 

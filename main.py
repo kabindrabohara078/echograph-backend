@@ -41,11 +41,14 @@ class searchInput(BaseModel):
     importance_score: float
 
 class newUser(BaseModel):
-    fname: str
-    lname: str
+    firstname: str
+    lastname: str
     email: EmailStr
     password: str
 
+class LoginUser(BaseModel):
+    email: EmailStr
+    password: str
 
 
 @app.post('/register')
@@ -63,28 +66,17 @@ def add_new_user(user: newUser):
 
     return "Added successfully"
 
-
-
-class LoginUser(BaseModel):
-    email: EmailStr
-    password: str
-
-
 @app.post('/login')
 def login_user(user: LoginUser):
-
-    print("+++++++++++++++++++++++")
-    print("Got a login request")
-    print(user)
-    print("+++++++++++++++++++++++")
-
 
     login_response = login(user)
 
     if login_response == -1:
         return "Does not exist"
-    else:
+    elif login_response == False:
         return "Invalid Credentials"
+    else:
+        return "Good to have you back"
 
 
 
