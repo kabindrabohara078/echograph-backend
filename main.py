@@ -189,6 +189,9 @@ def login_user(user: LoginUser):
             detail="Invalid credentials"
         )
 
+
+    modify_reminders()
+
     cursor = conn.cursor()
 
     cursor.execute(

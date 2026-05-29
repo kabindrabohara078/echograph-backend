@@ -20,6 +20,9 @@ def login(user):
 
     cursor = conn.cursor()
 
+
+    print(user)
+
     cursor.execute(
         """
         SELECT password_hash FROM user_auth WHERE email= %s
