@@ -11,9 +11,10 @@ CREATE TABLE memories_v2 (
     state TEXT NOT NULL DEFAULT 'active'
     CHECK (
         state IN (
+            'permanent',
+            'temporary',
             'active',
-            'archive',
-            'delete'
+            'archive'
         )
     ),
 
@@ -51,7 +52,7 @@ CREATE TABLE memories_v2 (
     embedding VECTOR(384)
     NOT NULL,
 
-    created_at TIMESTAMP
+    initial_date TIMESTAMP
     NOT NULL DEFAULT NOW(),
 
     updated_at TIMESTAMP
@@ -66,5 +67,5 @@ CREATE TABLE memories_v2 (
     ref_link BIGINT
     REFERENCES memories_v2(ref_id),
 
-    expires_at TIMESTAMP
+    node_life INTEGER NOT NULL
 );

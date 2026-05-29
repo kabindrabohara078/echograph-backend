@@ -32,7 +32,7 @@ app = FastAPI()
 # =========================================================
 
 origins = [
-    "http://localhost:5174",
+    "http://localhost:5173",
 ]
 
 app.add_middleware(
@@ -95,7 +95,8 @@ class MemoryInput(BaseModel):
         "delete"
     ]
 
-    score: float = 1
+    score: float
+    node_life: int
 
 
 class SearchInput(BaseModel):
@@ -189,8 +190,9 @@ def login_user(user: LoginUser):
             detail="Invalid credentials"
         )
 
-
-    modify_reminders()
+    print("+++++++++++++++++++++Frontend json+++++++++++++++++++++++")
+    print(user)
+    # modify_reminders()
 
     cursor = conn.cursor()
 
@@ -274,7 +276,7 @@ def create_memory(
 
         ORDER BY distance ASC
 
-        LIMIT 5
+        LIMIT 3
         """,
         (
             embedding,
@@ -335,7 +337,7 @@ def create_memory(
 
             return {
                 "status": "no matching memory found",
-                "threshold": 0.35
+                "threshold": 0.30
             }
 
         return {
@@ -350,8 +352,19 @@ def create_memory(
     # NORMAL MEMORY STORE
     # =====================================================
 
-    modified_state = "active"
 
+    if memory.type in ['fact', 'goal']:
+        modified_state = "permanent"
+    elif memory.type in ['preference', 'decision', 'relationship', 'profile', 'feedback']:
+        modified_state = "active"
+    else:
+        modified_state = "temporary"
+    
+    node_life = 91
+    if modified_state == "temporary":
+        node_life = memory.node_life
+
+    
     cursor.execute(
     """
     INSERT INTO memories_v2 (
@@ -362,10 +375,12 @@ def create_memory(
         type,
         importance_score,
         embedding,
-        created_at
+        initial_date,
+        node_life
     )
 
     VALUES (
+        %s,
         %s,
         %s,
         %s,
@@ -382,7 +397,8 @@ def create_memory(
         memory.type,
         memory.score,
         embedding,
-        datetime.utcnow()
+        datetime.utcnow(),
+        node_life
     )
     )
 

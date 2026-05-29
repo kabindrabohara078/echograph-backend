@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # environment: local url
-DATABASE_URL = os.getenv("DTABASE_URL")
+DATABASE_URL = os.getenv("DATABASE_URL")
 
 
 # connecting database
