@@ -4,7 +4,6 @@ from datetime import datetime
 
 from fastapi import (
     FastAPI,
-    HTTPException,
     Depends
 )
 
@@ -14,7 +13,8 @@ from fastapi.security import OAuth2PasswordBearer
 from pydantic import BaseModel, EmailStr
 
 from database import conn
-from embedding import generate_embedding
+# from embedding import generate_embedding
+# from model.search import retrieve_context
 
 from authentication import login, signup
 
@@ -54,8 +54,7 @@ oauth2_scheme = OAuth2PasswordBearer(
 
 
 def get_current_user(
-    token: str = Depends(oauth2_scheme)
-):
+    token: str = Depends(oauth2_scheme)):
 
     user_id = decode_token(token)
 
@@ -66,6 +65,7 @@ def get_current_user(
         )
 
     return user_id
+
 
 
 # =========================================================
@@ -145,431 +145,234 @@ def root():
         "message": "EchoGraph API Running"
     }
 
-
 # =========================================================
 # REGISTER
 # =========================================================
-
 @app.post("/register")
 def add_new_user(user: NewUser):
 
-    signup_response = signup(user)
+    if signup(user):
+        return {
+            "message": "User added successfully"
+        }
 
-    if signup_response:
 
-        raise HTTPException(
-            status_code=409,
-            detail="User already exists"
-        )
-
-    return {
-        "message": "User added successfully"
-    }
 
 
 # =========================================================
 # LOGIN
 # =========================================================
-
 @app.post("/login")
 def login_user(user: LoginUser):
 
-    login_response = login(user)
+    user_id = login(user)
 
-    if login_response == -1:
+    if user_id:
 
-        raise HTTPException(
-            status_code=404,
-            detail="User does not exist"
-        )
+        access_token = create_access_token({
+            "sub": user_id
+        })
+        return {
+            "access_token": access_token,
+            "token_type": "bearer"
+        }
 
-    elif login_response is False:
-
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid credentials"
-        )
-
-    print("+++++++++++++++++++++Frontend json+++++++++++++++++++++++")
-    print(user)
-    # modify_reminders()
-
-    cursor = conn.cursor()
-
-    cursor.execute(
-        """
-        SELECT id
-        FROM users
-        WHERE email = %s
-        """,
-        (user.email,)
-    )
-
-    db_user = cursor.fetchone()
-
-    if db_user is None:
-
-        raise HTTPException(
-            status_code=404,
-            detail="User not found"
-        )
-
-    user_id = db_user[0]
-
-    access_token = create_access_token({
-        "sub": str(user_id)
-    })
-
-    return {
-        "access_token": access_token,
-        "token_type": "bearer"
-    }
 
 
 # =========================================================
 # CREATE MEMORY
 # =========================================================
 
-@app.post("/memory")
-def create_memory(
-    memory: MemoryInput,
-    current_user: str = Depends(get_current_user)
-):
+# @app.post("/memory")
+# def create_memory(
+#     memory: MemoryInput,
+#     current_user: str = Depends(get_current_user)
+# ):
 
-    # =====================================================
-    # USER ID
-    # =====================================================
+#     # =====================================================
+#     # USER ID
+#     # =====================================================
 
-    user_id = int(current_user)
-
-    # =====================================================
-    # GENERATE EMBEDDING
-    # =====================================================
-
-    embedding = generate_embedding(
-        memory.context
-    )
-
-    cursor = conn.cursor()
-
-    # =====================================================
-    # DELETE MEMORY
-    # =====================================================
-
-    if memory.type == "delete":
-
-        print("Deleting memory...")
-
-        # DEBUG CLOSEST MATCHES
-        cursor.execute(
-        """
-        SELECT
-            ref_id,
-            content,
-            embedding <=> %s::vector AS distance
-
-        FROM memories_v2
-
-        WHERE
-            state = 'active'
-            AND user_id = %s
-
-        ORDER BY distance ASC
-
-        LIMIT 3
-        """,
-        (
-            embedding,
-            user_id
-        )
-        )
-
-        debug_rows = cursor.fetchall()
-
-        print("\n========== CLOSEST MEMORIES ==========")
-
-        for row in debug_rows:
-            print(row)
-
-        print("======================================\n")
-
-        # DELETE BEST MATCH
-        cursor.execute(
-        """
-        DELETE FROM memories_v2
-
-        WHERE ref_id = (
-
-            SELECT ref_id
-
-            FROM memories_v2
-
-            WHERE
-                state = 'active'
-                AND user_id = %s
-                AND (
-                    embedding <=> %s::vector
-                ) < 0.30
-
-            ORDER BY (
-                embedding <=> %s::vector
-            ) ASC
-
-            LIMIT 1
-        )
-
-        RETURNING
-            ref_id,
-            content;
-        """,
-        (
-            user_id,
-            embedding,
-            embedding
-        )
-        )
-
-        deleted_memory = cursor.fetchone()
-
-        conn.commit()
-
-        if deleted_memory is None:
-
-            return {
-                "status": "no matching memory found",
-                "threshold": 0.30
-            }
-
-        return {
-            "status": "memory deleted",
-            "deleted_memory": {
-                "ref_id": deleted_memory[0],
-                "content": deleted_memory[1]
-            }
-        }
-
-    # =====================================================
-    # NORMAL MEMORY STORE
-    # =====================================================
+#     user_id = int(current_user)
 
 
-    if memory.type in ['fact', 'goal']:
-        modified_state = "permanent"
-    elif memory.type in ['preference', 'decision', 'relationship', 'profile', 'feedback']:
-        modified_state = "active"
-    else:
-        modified_state = "temporary"
+#     print("+++++++++++++++++++++Memory json+++++++++++++++++++++++")
+#     print(memory)
+
+#     # =====================================================
+#     # GENERATE EMBEDDING
+#     # =====================================================
+
+#     embedding = generate_embedding(
+#         memory.context
+#     )
+
+#     cursor = conn.cursor()
+
+#     # =====================================================
+#     # DELETE MEMORY
+#     # =====================================================
+
+#     if memory.type == "delete":
+
+#         print("Deleting memory...")
+
+#         # DEBUG CLOSEST MATCHES
+#         cursor.execute(
+#         """
+#         SELECT
+#             ref_id,
+#             content,
+#             embedding <=> %s::vector AS distance
+
+#         FROM memories_v2
+
+#         WHERE
+#             state = 'active'
+#             AND user_id = %s
+
+#         ORDER BY distance ASC
+
+#         LIMIT 3
+#         """,
+#         (
+#             embedding,
+#             user_id
+#         )
+#         )
+
+#         debug_rows = cursor.fetchall()
+
+#         print("\n========== CLOSEST MEMORIES ==========")
+
+#         for row in debug_rows:
+#             print(row)
+
+#         print("======================================\n")
+
+#         # DELETE BEST MATCH
+#         cursor.execute(
+#         """
+#         DELETE FROM memories_v2
+
+#         WHERE ref_id = (
+
+#             SELECT ref_id
+
+#             FROM memories_v2
+
+#             WHERE
+#                 state = 'active'
+#                 AND user_id = %s
+#                 AND (
+#                     embedding <=> %s::vector
+#                 ) < 0.30
+
+#             ORDER BY (
+#                 embedding <=> %s::vector
+#             ) ASC
+
+#             LIMIT 1
+#         )
+
+#         RETURNING
+#             ref_id,
+#             content;
+#         """,
+#         (
+#             user_id,
+#             embedding,
+#             embedding
+#         )
+#         )
+
+#         deleted_memory = cursor.fetchone()
+
+#         conn.commit()
+
+#         if deleted_memory is None:
+
+#             return {
+#                 "status": "no matching memory found",
+#                 "threshold": 0.30
+#             }
+
+#         return {
+#             "status": "memory deleted",
+#             "deleted_memory": {
+#                 "ref_id": deleted_memory[0],
+#                 "content": deleted_memory[1]
+#             }
+#         }
+
+#     # =====================================================
+#     # NORMAL MEMORY STORE
+#     # =====================================================
+
+
+#     if memory.type in ['fact', 'goal']:
+#         modified_state = "permanent"
+#     elif memory.type in ['preference', 'decision', 'relationship', 'profile', 'feedback']:
+#         modified_state = "active"
+#     else:
+#         modified_state = "temporary"
     
-    node_life = 91
-    if modified_state == "temporary":
-        node_life = memory.node_life
+#     node_life = 91
+#     if modified_state == "temporary":
+#         node_life = memory.node_life
 
     
-    cursor.execute(
-    """
-    INSERT INTO memories_v2 (
+#     cursor.execute(
+#     """
+#     INSERT INTO memories_v2 (
 
-        user_id,
-        content,
-        state,
-        type,
-        importance_score,
-        embedding,
-        initial_date,
-        node_life
-    )
+#         user_id,
+#         content,
+#         state,
+#         type,
+#         importance_score,
+#         embedding,
+#         initial_date,
+#         node_life
+#     )
 
-    VALUES (
-        %s,
-        %s,
-        %s,
-        %s,
-        %s,
-        %s,
-        %s,
-        %s
-    )
-    """,
-    (
-        user_id,
-        memory.context,
-        modified_state,
-        memory.type,
-        memory.score,
-        embedding,
-        datetime.utcnow(),
-        node_life
-    )
-    )
+#     VALUES (
+#         %s,
+#         %s,
+#         %s,
+#         %s,
+#         %s,
+#         %s,
+#         %s,
+#         %s
+#     )
+#     """,
+#     (
+#         user_id,
+#         memory.context,
+#         modified_state,
+#         memory.type,
+#         memory.score,
+#         embedding,
+#         datetime.utcnow(),
+#         node_life
+#     )
+#     )
 
-    conn.commit()
+#     conn.commit()
 
-    return {
-        "status": "memory stored",
-        "user_id": user_id
-    }
+#     return {
+#         "status": "memory stored",
+#         "user_id": user_id
+#     }
 
 
-# =========================================================
-# SEARCH MEMORY
-# =========================================================
+# # =========================================================
+# # SEARCH MEMORY
+# # =========================================================
+# @app.post("/search")
+# def search_memory(
+#     search: SearchInput,
+#     current_user: str = Depends(get_current_user)):
 
-@app.post("/search")
-def search_memory(
-    search: SearchInput,
-    current_user: str = Depends(get_current_user)
-):
-
-    user_id = int(current_user)
-
-    query_embedding = generate_embedding(
-        search.query
-    )
-
-    cursor = conn.cursor()
-
-    cursor.execute(
-    """
-    SELECT
-
-        ref_id,
-        content,
-        type,
-        importance_score,
-        access_ratio,
-        created_at,
-
-        embedding <=> %s::vector AS distance,
-
-        (
-            (
-                1.0 /
-                (
-                    1.0 +
-                    (
-                        embedding <=> %s::vector
-                    )
-                )
-            )
-
-            + (0.25 * importance_score)
-
-            + (
-                0.1 *
-                LN(1 + access_ratio)
-            )
-
-            + (
-                0.2 *
-                EXP(
-                    -0.000001 *
-                    EXTRACT(
-                        EPOCH FROM (
-                            NOW() - created_at
-                        )
-                    )
-                )
-            )
-
-        ) AS final_rank
-
-    FROM memories_v2
-
-    WHERE
-        state = 'active'
-        AND user_id = %s
-
-    ORDER BY final_rank DESC
-
-    LIMIT 5
-    """,
-    (
-        query_embedding,
-        query_embedding,
-        user_id
-    )
-    )
-
-    results = cursor.fetchall()
-
-    print("\n=========== SEARCH RESULTS ===========")
-
-    for row in results:
-        print(row)
-
-    print("======================================\n")
-
-    # =====================================================
-    # FILTER DISTANCE
-    # =====================================================
-
-    memory_ids = [
-        row[0]
-        for row in results
-        if row[6] < 0.5
-    ]
-
-    # =====================================================
-    # UPDATE ACCESS RATIO
-    # =====================================================
-
-    if memory_ids:
-
-        cursor.execute(
-        """
-        UPDATE memories_v2
-
-        SET
-            access_ratio = access_ratio * 1.05,
-            last_accessed = NOW()
-
-        WHERE ref_id = ANY(%s)
-        """,
-        (memory_ids,)
-        )
-
-        conn.commit()
-
-    # =====================================================
-    # FORMAT RESULTS
-    # =====================================================
-
-    memories = []
-
-    for row in results:
-
-        if row[0] in memory_ids:
-
-            memories.append({
-
-                "id": row[0],
-                "content": row[1],
-                "type": row[2],
-                "importance_score": row[3],
-                "access_ratio": row[4],
-                "created_at": row[5],
-                "distance": float(row[6]),
-                "final_rank": float(row[7])
-
-            })
-
-    # =====================================================
-    # NO RESULTS
-    # =====================================================
-
-    if len(memories) == 0:
-
-        return {
-            "results": [],
-            "message": "No memory available with high confidence"
-        }
-
-    # =====================================================
-    # SUCCESS
-    # =====================================================
-
-    return {
-        "results": memories,
-        "count": len(memories),
-        "user_id": user_id
-    }
+#     retrieve_context(current_user, search)

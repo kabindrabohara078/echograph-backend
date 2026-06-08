@@ -1,6 +1,11 @@
 from database import conn
 from passlib.context import CryptContext
 
+from fastapi import (
+    FastAPI,
+    HTTPException,
+    Depends
+)
 
 pwd_context = CryptContext(
     schemes = ["bcrypt"],
@@ -14,47 +19,39 @@ def verify_password(plain_password: str, hashed_password: str):
     return pwd_context.verify(plain_password, hashed_password)
 
 
-
 def login(user):
+
+    print("Login test")
+    print(user)
 
     cursor = conn.cursor()
 
-
-    print(user)
-
     cursor.execute(
         """
-        SELECT password_hash FROM user_auth WHERE email= %s
+        SELECT user_id, password_hash FROM user_auth WHERE email= %s
         """,(user.email,)
     )
 
     row = cursor.fetchone()
 
-    print('++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++')
-    print(row)
+    if row:
+        hashed_password = row[1]
 
-    if not row:
-        return -1
-
-
-    hashed_password = row[0]
-
-    print(hashed_password)
-
-    if verify_password(user.password, hashed_password) == False:
+        if not verify_password(user.password, hashed_password):
+            raise HTTPException(
+            status_code=401,
+            detail="Invalid credentials"
+        )
+            return 0
+    else:
+        raise HTTPException(
+            status_code=404,
+            detail="User does not exist"
+        )
         return 0
     
-    return True
-   
-
-
-
-
-
-# firstname
-# lastname
-# email
-# password
+    return str(row[0])
+    
 
 def signup(user):
 
@@ -69,7 +66,11 @@ def signup(user):
     existing_user = cursor.fetchone()
 
     if existing_user:
-        return "User already Exists"
+        raise HTTPException(
+            status_code=409,
+            detail="User already exists"
+        )
+        return 0
     else:
         cursor.execute(
             """
@@ -77,28 +78,16 @@ def signup(user):
             VALUES(%s, %s, %s)
             RETURNING id
             """, (user.firstname, user.lastname, user.email)
-
         )
+        hash_pwd = hash_password(user.password)
 
         user_id = cursor.fetchone()[0]
-
-        hash_pwd = hash_password(user.password)
-        print('++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++') #password hash test
-        print(hash_pwd)
-        print('++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++')
 
         cursor.execute(
             """
             INSERT INTO user_auth(user_id, email, password_hash) VALUES(%s,%s, %s)
             """, (user_id, user.email, hash_pwd)
         )
-
         conn.commit()
-
-    return 0
-
-
-
-
-
+        return 1
 
