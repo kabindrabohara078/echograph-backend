@@ -1,22 +1,24 @@
 import os
-from typing import Literal
+from typing import Literal, Optional
 from datetime import datetime
 
 from fastapi import (
     FastAPI,
-    Depends
+    Depends,
+    HTTPException
 )
 
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer
 
 from pydantic import BaseModel, EmailStr
+from jose import jwt
 
 from database import conn
-# from embedding import generate_embedding
-# from model.search import retrieve_context
+from embedding import generate_embedding
+from model.search import retrieve_context
 
-from authentication import login, signup
+from authentication import login, signup, google_auth_user
 
 from hash_password import (
     create_access_token,
@@ -24,20 +26,16 @@ from hash_password import (
 )
 
 
-app = FastAPI()
+app = FastAPI(title="EchoGraph RAG Memory API")
 
 
 # =========================================================
 # CORS
 # =========================================================
 
-origins = [
-    "http://localhost:5173",
-]
-
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:3000", "*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -73,9 +71,7 @@ def get_current_user(
 # =========================================================
 
 class MemoryInput(BaseModel):
-
     context: str
-
     type: Literal[
         "fact",
         "event",
@@ -94,32 +90,13 @@ class MemoryInput(BaseModel):
         "emotion",
         "delete"
     ]
-
-    score: float
-    node_life: int
+    score: float = 1.0
+    node_life: int = 91
 
 
 class SearchInput(BaseModel):
-
     query: str
-
-    type: Literal[
-        "fact",
-        "event",
-        "preference",
-        "decision",
-        "task",
-        "goal",
-        "relationship",
-        "profile",
-        "conversation",
-        "observation",
-        "knowledge",
-        "plan",
-        "reminder",
-        "feedback",
-        "emotion"
-    ]
+    type: Optional[str] = "fact"
 
 
 class NewUser(BaseModel):
@@ -134,13 +111,16 @@ class LoginUser(BaseModel):
     password: str
 
 
+class GoogleAuthInput(BaseModel):
+    credential: str
+
+
 # =========================================================
 # ROOT
 # =========================================================
 
 @app.get("/")
 def root():
-
     return {
         "message": "EchoGraph API Running"
     }
@@ -150,229 +130,210 @@ def root():
 # =========================================================
 @app.post("/register")
 def add_new_user(user: NewUser):
-
     if signup(user):
         return {
             "message": "User added successfully"
         }
-
-
-
 
 # =========================================================
 # LOGIN
 # =========================================================
 @app.post("/login")
 def login_user(user: LoginUser):
-
-    user_id = login(user)
-
-    if user_id:
-
+    res = login(user)
+    if res:
         access_token = create_access_token({
-            "sub": user_id
+            "sub": res["user_id"]
         })
         return {
             "access_token": access_token,
-            "token_type": "bearer"
+            "token_type": "bearer",
+            "name": res["name"],
+            "email": res["email"]
         }
 
+# =========================================================
+# GOOGLE AUTH
+# =========================================================
+@app.post("/google-auth")
+def google_auth(payload: GoogleAuthInput):
+    try:
+        claims = jwt.get_unverified_claims(payload.credential)
+        email = claims.get("email")
+        name = claims.get("name", "")
 
+        if not email:
+            raise HTTPException(status_code=400, detail="Invalid Google token claims: missing email")
+
+        user_id, user_name = google_auth_user(email, name)
+        access_token = create_access_token({"sub": user_id})
+
+        return {
+            "access_token": access_token,
+            "token_type": "bearer",
+            "email": email,
+            "name": user_name
+        }
+    except Exception as e:
+        print("Google auth exception:", e)
+        raise HTTPException(status_code=400, detail=f"Google authentication failed: {str(e)}")
 
 # =========================================================
 # CREATE MEMORY
 # =========================================================
+@app.post("/memory")
+def create_memory(
+    memory: MemoryInput,
+    current_user: str = Depends(get_current_user)
+):
+    user_id = int(current_user)
+    print("+++++++++++++++++++++ Memory Input +++++++++++++++++++++++")
+    print(memory)
 
-# @app.post("/memory")
-# def create_memory(
-#     memory: MemoryInput,
-#     current_user: str = Depends(get_current_user)
-# ):
+    embedding = generate_embedding(memory.context)
+    vector_str = f"[{','.join(map(str, embedding))}]"
 
-#     # =====================================================
-#     # USER ID
-#     # =====================================================
+    cursor = conn.cursor()
 
-#     user_id = int(current_user)
+    if memory.type == "delete":
+        print("Deleting memory...")
+        cursor.execute(
+            """
+            DELETE FROM memories_v2
+            WHERE ref_id = (
+                SELECT ref_id
+                FROM memories_v2
+                WHERE
+                    state IN ('active', 'permanent', 'temporary')
+                    AND user_id = %s
+                    AND (embedding <=> %s::vector) < 0.30
+                ORDER BY (embedding <=> %s::vector) ASC
+                LIMIT 1
+            )
+            RETURNING ref_id, content;
+            """,
+            (user_id, vector_str, vector_str)
+        )
+        deleted_memory = cursor.fetchone()
+        conn.commit()
 
+        if deleted_memory is None:
+            return {
+                "status": "no matching memory found",
+                "threshold": 0.30
+            }
 
-#     print("+++++++++++++++++++++Memory json+++++++++++++++++++++++")
-#     print(memory)
+        return {
+            "status": "memory deleted",
+            "deleted_memory": {
+                "ref_id": deleted_memory[0],
+                "content": deleted_memory[1]
+            }
+        }
 
-#     # =====================================================
-#     # GENERATE EMBEDDING
-#     # =====================================================
+    # Normal Memory Store
+    if memory.type in ['fact', 'goal']:
+        modified_state = "permanent"
+    elif memory.type in ['preference', 'decision', 'relationship', 'profile', 'feedback']:
+        modified_state = "active"
+    else:
+        modified_state = "temporary"
 
-#     embedding = generate_embedding(
-#         memory.context
-#     )
+    node_life = 91
+    if modified_state == "temporary":
+        node_life = memory.node_life
 
-#     cursor = conn.cursor()
+    cursor.execute(
+        """
+        INSERT INTO memories_v2 (
+            user_id,
+            content,
+            state,
+            type,
+            importance_score,
+            embedding,
+            initial_date,
+            node_life
+        )
+        VALUES (
+            %s, %s, %s, %s, %s, %s::vector, %s, %s
+        )
+        """,
+        (
+            user_id,
+            memory.context,
+            modified_state,
+            memory.type,
+            memory.score,
+            vector_str,
+            datetime.utcnow(),
+            node_life
+        )
+    )
 
-#     # =====================================================
-#     # DELETE MEMORY
-#     # =====================================================
+    conn.commit()
 
-#     if memory.type == "delete":
+    return {
+        "status": "memory stored",
+        "user_id": user_id
+    }
 
-#         print("Deleting memory...")
+class ChatInput(BaseModel):
+    message: str
 
-#         # DEBUG CLOSEST MATCHES
-#         cursor.execute(
-#         """
-#         SELECT
-#             ref_id,
-#             content,
-#             embedding <=> %s::vector AS distance
+# =========================================================
+# SEARCH MEMORY
+# =========================================================
+@app.post("/search")
+def search_memory(
+    search: SearchInput,
+    current_user: str = Depends(get_current_user)
+):
+    return retrieve_context(current_user, search)
 
-#         FROM memories_v2
+# =========================================================
+# HYBRID AI CHAT AGENT (AUTO-RETRIEVE + AUTO-STORE)
+# =========================================================
+@app.post("/chat")
+def chat_agent(
+    payload: ChatInput,
+    current_user: str = Depends(get_current_user)
+):
+    user_id = int(current_user)
+    user_msg = payload.message.strip()
 
-#         WHERE
-#             state = 'active'
-#             AND user_id = %s
+    # 1. RETRIEVE: Auto-fetch relevant user context
+    search_obj = SearchInput(query=user_msg)
+    retrieval_res = retrieve_context(current_user, search_obj)
+    memories = retrieval_res.get("results", [])
 
-#         ORDER BY distance ASC
+    # 2. AUTO-STORE: If message contains statement/fact (not a direct query), auto-store to memory
+    stored = False
+    if len(user_msg) > 12 and not user_msg.rstrip().endswith("?"):
+        embedding = generate_embedding(user_msg)
+        vector_str = f"[{','.join(map(str, embedding))}]"
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            INSERT INTO memories_v2 (user_id, content, type, state, importance_score, access_ratio, embedding, node_life)
+            VALUES (%s, %s, %s, %s, %s, %s, %s::vector, %s)
+            """,
+            (user_id, user_msg, "fact", "active", 1.0, 0.1, vector_str, 91)
+        )
+        conn.commit()
+        stored = True
 
-#         LIMIT 3
-#         """,
-#         (
-#             embedding,
-#             user_id
-#         )
-#         )
+    # 3. GENERATE AGENT RESPONSE
+    if memories:
+        top_facts = [f"• {m['content']}" for m in memories[:3]]
+        context_str = "\n".join(top_facts)
+        reply = f"Here is what I recalled from your EchoGraph persistent memory:\n{context_str}\n\nHow can I assist you with this context?"
+    else:
+        reply = f"I've saved your statement into your EchoGraph memory bank! You can ask me questions about it anytime."
 
-#         debug_rows = cursor.fetchall()
-
-#         print("\n========== CLOSEST MEMORIES ==========")
-
-#         for row in debug_rows:
-#             print(row)
-
-#         print("======================================\n")
-
-#         # DELETE BEST MATCH
-#         cursor.execute(
-#         """
-#         DELETE FROM memories_v2
-
-#         WHERE ref_id = (
-
-#             SELECT ref_id
-
-#             FROM memories_v2
-
-#             WHERE
-#                 state = 'active'
-#                 AND user_id = %s
-#                 AND (
-#                     embedding <=> %s::vector
-#                 ) < 0.30
-
-#             ORDER BY (
-#                 embedding <=> %s::vector
-#             ) ASC
-
-#             LIMIT 1
-#         )
-
-#         RETURNING
-#             ref_id,
-#             content;
-#         """,
-#         (
-#             user_id,
-#             embedding,
-#             embedding
-#         )
-#         )
-
-#         deleted_memory = cursor.fetchone()
-
-#         conn.commit()
-
-#         if deleted_memory is None:
-
-#             return {
-#                 "status": "no matching memory found",
-#                 "threshold": 0.30
-#             }
-
-#         return {
-#             "status": "memory deleted",
-#             "deleted_memory": {
-#                 "ref_id": deleted_memory[0],
-#                 "content": deleted_memory[1]
-#             }
-#         }
-
-#     # =====================================================
-#     # NORMAL MEMORY STORE
-#     # =====================================================
-
-
-#     if memory.type in ['fact', 'goal']:
-#         modified_state = "permanent"
-#     elif memory.type in ['preference', 'decision', 'relationship', 'profile', 'feedback']:
-#         modified_state = "active"
-#     else:
-#         modified_state = "temporary"
-    
-#     node_life = 91
-#     if modified_state == "temporary":
-#         node_life = memory.node_life
-
-    
-#     cursor.execute(
-#     """
-#     INSERT INTO memories_v2 (
-
-#         user_id,
-#         content,
-#         state,
-#         type,
-#         importance_score,
-#         embedding,
-#         initial_date,
-#         node_life
-#     )
-
-#     VALUES (
-#         %s,
-#         %s,
-#         %s,
-#         %s,
-#         %s,
-#         %s,
-#         %s,
-#         %s
-#     )
-#     """,
-#     (
-#         user_id,
-#         memory.context,
-#         modified_state,
-#         memory.type,
-#         memory.score,
-#         embedding,
-#         datetime.utcnow(),
-#         node_life
-#     )
-#     )
-
-#     conn.commit()
-
-#     return {
-#         "status": "memory stored",
-#         "user_id": user_id
-#     }
-
-
-# # =========================================================
-# # SEARCH MEMORY
-# # =========================================================
-# @app.post("/search")
-# def search_memory(
-#     search: SearchInput,
-#     current_user: str = Depends(get_current_user)):
-
-#     retrieve_context(current_user, search)
+    return {
+        "reply": reply,
+        "memories_retrieved": memories,
+        "new_memory_stored": stored,
+        "user_id": user_id
+    }

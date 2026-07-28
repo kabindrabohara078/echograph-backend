@@ -164,4 +164,8 @@ Current capabilities:
 - memory lifecycle management
 - FastAPI + PostgreSQL + pgvector architecture
 
-EchoGraph is currently evolving into a full AI memory platform.
+EchoGraph is currently evolving into a full AI memory platform. This project acts as a Retrieval-Augmented Generation (RAG) system that stores context in the database for retrieval by AI agents and LLMs.
+
+## 🚀 Roadmap / Future Plans
+
+- **Local Lightweight Database:** Implementing a local lite database on the user's computer to store temporary data and frequent user preferences for faster access and offline capabilities.
