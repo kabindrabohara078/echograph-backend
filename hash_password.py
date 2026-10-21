@@ -10,7 +10,9 @@ load_dotenv()
 SECRET_KEY = os.getenv("SECRET_KEY")
 
 if not SECRET_KEY:
-    raise ValueError("SECRET_KEY is missing in .env")
+    print("WARNING: SECRET_KEY is not set in environment or .env! Using fallback key for startup. Please set SECRET_KEY in Render dashboard.")
+    SECRET_KEY = "echograph-fallback-secret-key-jb37dfiwnd8uwocrv084ifvsozoc8cu_ei-w38ei"
+
 
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30

@@ -76,10 +76,29 @@ def init_db():
         initial_date TIMESTAMP NOT NULL DEFAULT NOW(),
         updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
         last_accessed TIMESTAMP NOT NULL DEFAULT NOW(),
-        linkable BOOLEAN NOT NULL DEFAULT FALSE,
+        linkable BOOLEAN NOT NULL DEFAULT TRUE,
         ref_link BIGINT REFERENCES memories_v2(ref_id),
-        node_life INTEGER NOT NULL DEFAULT 91
+        node_life INTEGER DEFAULT 91,
+        expires_at TIMESTAMP,
+        entities TEXT
     );
+    """)
+
+    print("Creating 'memory_links' table...")
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS memory_links (
+        id BIGSERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        source_id BIGINT NOT NULL REFERENCES memories_v2(ref_id) ON DELETE CASCADE,
+        target_id BIGINT NOT NULL REFERENCES memories_v2(ref_id) ON DELETE CASCADE,
+        relation_type TEXT NOT NULL,
+        weight FLOAT NOT NULL DEFAULT 1.0,
+        created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+        UNIQUE(source_id, target_id, relation_type)
+    );
+    CREATE INDEX IF NOT EXISTS idx_mem_links_user ON memory_links(user_id);
+    CREATE INDEX IF NOT EXISTS idx_mem_links_src ON memory_links(source_id);
+    CREATE INDEX IF NOT EXISTS idx_mem_links_tgt ON memory_links(target_id);
     """)
 
     conn.commit()
